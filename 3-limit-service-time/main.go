@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	"sync"
 	"time"
 )
 
@@ -23,9 +24,21 @@ type User struct {
 	TimeUsed  int64 // in seconds
 }
 
+var (
+	userProcessQuota = make(map[int]int)
+	mx               = sync.Mutex{}
+	processLimit     = 10
+)
+
 // HandleRequest runs the processes requested by users. Returns false
 // if process had to be killed
 func HandleRequest(process func(), u *User) bool {
+	mx.Lock()
+	if _, ok := userProcessQuota[u.ID]; !ok {
+		userProcessQuota[u.ID] = processLimit
+	}
+	mx.Unlock()
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	go func() {
@@ -35,9 +48,16 @@ func HandleRequest(process func(), u *User) bool {
 
 	for {
 		select {
-		case <-time.Tick(time.Second * 10):
+		case <-time.Tick(time.Second):
 			if !u.IsPremium {
-				return false
+				mx.Lock()
+				userProcessQuota[u.ID]--
+				leftQuota := userProcessQuota[u.ID]
+				mx.Unlock()
+
+				if leftQuota <= 0 {
+					return false
+				}
 			}
 
 		case <-ctx.Done():
