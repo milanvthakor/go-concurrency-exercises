@@ -12,7 +12,13 @@ package main
 import (
 	"fmt"
 	"sync"
+	"time"
 )
+
+// rateLimiter is a ticker that gives one tick every second.
+// From all the running Crawlers, only one of them will get this tick.
+// This way, we will request at most one page per second!
+var rateLimiter = time.NewTicker(time.Second)
 
 // Crawl uses `fetcher` from the `mockfetcher.go` file to imitate a
 // real crawler. It crawls until the maximum depth has reached.
@@ -23,6 +29,7 @@ func Crawl(url string, depth int, wg *sync.WaitGroup) {
 		return
 	}
 
+	<-rateLimiter.C
 	body, urls, err := fetcher.Fetch(url)
 	if err != nil {
 		fmt.Println(err)
